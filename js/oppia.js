@@ -33,10 +33,12 @@ $( document ).ready(function() {
 	});
 
     // Slider functionality
-    const totalSlides = document.querySelectorAll('slide').length;
+    const slides =  document.querySelectorAll('slide');
+    const totalSlides = slides.length;
 
     if (totalSlides > 0) {
         let currentSlide = 0;
+        slides[currentSlide].classList.add('active');
         const slide = document.querySelector('slide');
         const sliderContainer = slide.parentNode;
         const slideStyle = window.getComputedStyle(slide);
@@ -61,8 +63,15 @@ $( document ).ready(function() {
 
         function changeSlide(direction) {
             currentSlide = Math.max(0, Math.min(currentSlide + direction, totalSlides - 1));
-            if (paginationItems.length > 0)
-            {
+
+            slides[currentSlide].classList.add('active');
+            if (direction > 0) {
+                slides[currentSlide - 1].classList.remove('active');
+            } else {
+                slides[currentSlide + 1].classList.remove('active');
+            }
+
+            if (paginationItems.length > 0) {
                 if (direction > 0) {
                     paginationItems[currentSlide].classList.add('active');
                 } else {
@@ -85,21 +94,30 @@ $( document ).ready(function() {
 
         let touchStartX = 0;
         let touchEndX = 0;
+        let touchStartY = 0;
+        let touchEndY = 0;
 
         sliderContainer.addEventListener('touchstart', (e) => {
-            if (currentSlide !== totalSlides - 1) {
-                e.preventDefault();
-            }
             touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
         });
 
         function handleTouchEnd(e) {
             touchEndX = e.changedTouches[0].screenX;
-            if (touchEndX < touchStartX) {
-                changeSlide(1); // Swipe left
-            }
-            if (touchEndX > touchStartX) {
-                changeSlide(-1); // Swipe right
+            touchEndY = e.changedTouches[0].screenY;
+
+            deltaX = touchEndX - touchStartX;
+            deltaY = touchEndY - touchStartY;
+
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                // Horizontal Scroll
+                if (deltaX < 0) {
+                    console.log("swipe left");
+                    changeSlide(1); // Swipe left
+                } else {
+                    console.log("swipe right");
+                    changeSlide(-1); // Swipe right
+                }
             }
         }
 
@@ -205,43 +223,59 @@ $( document ).ready(function() {
 
     });
 
-    //Audio Embed Functionality
-    const audioPlayerContainer = document.getElementById('audio-player-container');
-    if(audioPlayerContainer !== null) {
-        const playIconContainer = document.getElementById('play-icon');
-        const seekSlider = document.getElementById('seek-slider');
+    var currentPlayIcon = null;
+
+    $('.audio-player-container').each(function(i, elem){
+        const playerContainer = $(elem);
+        const playIcon = playerContainer.find('.play-icon');
+        const seekSlider = playerContainer.find('.seek-slider')[0];
         let playState = 'play';
-
-        playIconContainer.addEventListener('click', () => {
-            if (playState === 'play') {
-                playIconContainer.classList.remove('pause');
-                playIconContainer.classList.add('play');
-                audio.play();
-                requestAnimationFrame(whilePlaying);
-                playState = 'pause';
-            } else {
-                playIconContainer.classList.remove('play');
-                playIconContainer.classList.add('pause');
-                audio.pause();
-                cancelAnimationFrame(raf);
-                playState = 'play';
-            }
-        });
-
-        const showRangeProgress = (rangeInput) => {
-            if (rangeInput === seekSlider) audioPlayerContainer.style.setProperty('--seek-before-width', rangeInput.value / rangeInput.max * 100 + '%');
-        }
-
-        seekSlider.addEventListener('input', (e) => {
-            showRangeProgress(e.target);
-        });
-
 
         /* Implementation of the functionality of the audio player */
 
-        const audio = document.querySelector('audio');
-        const durationContainer = document.getElementById('duration');
+        const audio = playerContainer.find('audio')[0];
+        const duration = playerContainer.find('.duration');
         let raf = null;
+
+        playIcon.on('click', () => {
+            if (playState === 'play') {
+                if (currentPlayIcon != null){
+                    currentPlayIcon.click();
+                }
+                playIcon.removeClass('pause');
+                playIcon.addClass('play');
+                audio.play();
+                requestAnimationFrame(whilePlaying);
+                playState = 'pause';
+                currentPlayIcon = playIcon;
+            } else {
+                playIcon.removeClass('play');
+                playIcon.addClass('pause');
+                audio.pause();
+                cancelAnimationFrame(raf);
+                playState = 'play';
+                currentPlayIcon = null;
+            }
+        });
+
+        $(seekSlider)
+            .on('input', (e) => {
+                rangeInput = e.target;
+                if (rangeInput === seekSlider[0]){
+                    playerContainer.css('--seek-before-width', rangeInput.value / rangeInput.max * 100 + '%');
+                }
+                duration.text(calculateTime(audio.duration - seekSlider.value));
+                if (!audio.paused) {
+                    cancelAnimationFrame(raf);
+                }
+            })
+            .on('change', () => {
+                audio.currentTime = seekSlider.value;
+                if (!audio.paused) {
+                    requestAnimationFrame(whilePlaying);
+                }
+            });
+        
 
         const calculateTime = (secs) => {
             const minutes = Math.floor(secs / 60);
@@ -251,7 +285,7 @@ $( document ).ready(function() {
         }
 
         const displayDuration = () => {
-            durationContainer.textContent = calculateTime(audio.duration);
+            duration.text(calculateTime(audio.duration));
         }
 
         const setSliderMax = () => {
@@ -260,13 +294,13 @@ $( document ).ready(function() {
 
         const displayBufferedAmount = () => {
             const bufferedAmount = Math.floor(audio.buffered.end(audio.buffered.length - 1));
-            audioPlayerContainer.style.setProperty('--buffered-width', `${(bufferedAmount / seekSlider.max) * 100}%`);
+            playerContainer.css('--buffered-width', `${(bufferedAmount / seekSlider.max) * 100}%`);
         }
 
         const whilePlaying = () => {
             seekSlider.value = Math.floor(audio.currentTime);
-            durationContainer.textContent = calculateTime(audio.duration - seekSlider.value);
-            audioPlayerContainer.style.setProperty('--seek-before-width', `${seekSlider.value / seekSlider.max * 100}%`);
+            duration.text(calculateTime(audio.duration - seekSlider.value));
+            playerContainer.css('--seek-before-width', `${seekSlider.value / seekSlider.max * 100}%`);
             raf = requestAnimationFrame(whilePlaying);
         }
 
@@ -284,27 +318,15 @@ $( document ).ready(function() {
 
         audio.addEventListener('progress', displayBufferedAmount);
 
-        seekSlider.addEventListener('input', () => {
-            durationContainer.textContent = calculateTime(audio.duration - seekSlider.value);
-            if (!audio.paused) {
-                cancelAnimationFrame(raf);
-            }
-        });
+    });
 
-        seekSlider.addEventListener('change', () => {
-            audio.currentTime = seekSlider.value;
-            if (!audio.paused) {
-                requestAnimationFrame(whilePlaying);
-            }
-        });
-    }
 
 });
 
 function changeAudioSource(newSource) {
-    var audioElement = document.querySelector('audio');
-    if (audioElement) {
+    $('audio').each(function(i, audioElement){
         audioElement.src = newSource + audioElement.src.replace('file:///audio/', '');
         audioElement.load();
-    }
+    });
+
 }
